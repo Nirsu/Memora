@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:memora/main.dart';
-import 'package:memora/meeting.dart';
+import 'package:memora/app.dart';
+import 'package:memora/data/meeting_repository.dart';
 
 void main() {
   testWidgets('Create a meeting and persist personal notes at desktop width', (
@@ -22,7 +22,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();
-      expect(find.text('Vos conversations,\nl’esprit libre.'), findsOneWidget);
+      expect(find.text("Vos conversations,\nl'esprit libre."), findsOneWidget);
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('prepare-home')));
         await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -37,7 +37,8 @@ void main() {
       });
       await tester.pumpAndSettle();
       final entries = await tester.runAsync(
-        () => Library(Directory('${root.path}/.local/meetings')).load(),
+        () =>
+            MeetingRepository(Directory('${root.path}/.local/meetings')).load(),
       );
       expect(entries!.single.notes, 'Demander la date de livraison.');
       await tester.tap(find.text('Démarrer le repère temps'));
@@ -74,7 +75,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         await tester.runAsync(
-          () => Library(Directory('${root.path}/.local/meetings')).load(),
+          () =>
+              MeetingRepository(Directory('${root.path}/.local/meetings'))
+                  .load(),
         ),
         isEmpty,
       );
@@ -85,7 +88,8 @@ void main() {
       });
       await tester.pumpAndSettle();
       final restored = await tester.runAsync(
-        () => Library(Directory('${root.path}/.local/meetings')).load(),
+        () =>
+            MeetingRepository(Directory('${root.path}/.local/meetings')).load(),
       );
       expect(
         restored!.single.notes,

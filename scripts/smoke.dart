@@ -2,8 +2,9 @@
 import 'dart:io';
 import 'dart:async';
 
-import 'package:memora/engine.dart';
-import 'package:memora/meeting.dart';
+import 'package:memora/services/local_engine.dart';
+import 'package:memora/models/meeting.dart';
+import 'package:memora/data/meeting_repository.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -11,7 +12,9 @@ Future<void> main(List<String> args) async {
   }
   final root = Directory.current;
   // Keep synthetic checks out of the user's meeting library.
-  final library = Library(Directory('${root.path}/.local/smoke/meetings'));
+  final library = MeetingRepository(
+    Directory('${root.path}/.local/smoke/meetings'),
+  );
   final engine = LocalEngine(root, library);
   final existing = args.first == '--existing';
   final m = existing
@@ -21,7 +24,8 @@ Future<void> main(List<String> args) async {
           'Essai technique · réunion simulée',
           DateTime.now(),
         );
-  engine.onUpdate = () => stdout.writeln('${m.status} | ${engine.detail}');
+  engine.onUpdate = () =>
+      stdout.writeln('${m.status.label} | ${engine.detail}');
   final watch = Stopwatch()..start();
   final previousSummary = m.summary;
   try {

@@ -2,8 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:memora/meeting.dart';
-import 'package:memora/engine.dart';
+import 'package:memora/models/meeting.dart';
+import 'package:memora/data/meeting_repository.dart';
+import 'package:memora/models/summary.dart';
+import 'package:memora/models/transcript.dart';
+import 'package:memora/utils/timestamps.dart';
+import 'package:memora/services/local_engine.dart';
+import 'package:memora/services/ollama_client.dart';
+import 'package:memora/services/local_files.dart';
 
 void main() {
   test('Cancelling an import leaves the original intact and removes its partial copy', () async {
@@ -11,7 +17,7 @@ void main() {
     try {
       final source = await File('${dir.path}/source.mp4')
           .writeAsBytes([1, 2, 3]);
-      final store = Library(Directory('${dir.path}/meetings'));
+      final store = MeetingRepository(Directory('${dir.path}/meetings'));
       final m = Meeting('cancel-test', 'Import', DateTime(2026));
       final engine = LocalEngine(dir, store);
       engine.onUpdate = engine.cancel;
@@ -52,7 +58,7 @@ void main() {
   test('Removal preserves media, drains saves and can be undone without resurrection', () async {
     final dir = await Directory.systemTemp.createTemp('memora-remove-test-');
     try {
-      final store = Library(dir);
+      final store = MeetingRepository(dir);
       final m = Meeting('remove-test', 'Brouillon', DateTime(2026));
       final other = Meeting('keep-test', 'À conserver', DateTime(2026));
       await store.save(m);
@@ -63,7 +69,9 @@ void main() {
       final removal = store.remove(m);
       final lateSave = store.save(m);
       await Future.wait([pending, removal, lateSave]);
-      expect((await Library(dir).load()).map((m) => m.id), ['keep-test']);
+      expect((await MeetingRepository(dir).load()).map((m) => m.id), [
+        'keep-test',
+      ]);
       expect(await Directory(store.folder(m)).exists(), isFalse);
       expect(
         await File('${dir.path}/.trash/${m.id}/original.mkv').readAsBytes(),
@@ -148,7 +156,10 @@ void main() {
     ]);
     expect(markdown, contains('memora://seek/12300'));
     expect(markdown, isNot(contains('999')));
-    expect(() => validatedItems({'items': []}, {2}), throwsFormatException);
+    expect(
+      () => validatedItems({'items': <Object?>[]}, {2}),
+      throwsFormatException,
+    );
     expect(replayTimestamp('memora://seek/12300'), 12300);
     for (final href in [
       null,
@@ -167,7 +178,7 @@ void main() {
     () async {
       final dir = await Directory.systemTemp.createTemp('memora-test-');
       try {
-        final store = Library(dir);
+        final store = MeetingRepository(dir);
         final m = Meeting('test', 'Réunion', DateTime(2026, 9, 8));
         m.notes = 'Première note';
         final first = store.save(m);
@@ -192,7 +203,7 @@ void main() {
     () async {
       final dir = await Directory.systemTemp.createTemp('memora-export-test-');
       try {
-        final store = Library(Directory('${dir.path}/meetings'));
+        final store = MeetingRepository(Directory('${dir.path}/meetings'));
         final m = Meeting('test', 'Réunion', DateTime(2026));
         m.summary = 'Décision [00:00:02](memora://seek/2000)';
         m.segments = [Segment(0, 2000, 3000, 'On valide.', 'Alexandre')];
@@ -228,8 +239,11 @@ void main() {
           await File('$output/resume.md').readAsString(),
           'Correction hors de Memora',
         );
-        engine.config = {'ollamaUrl': 'https://example.com'};
-        expect(() => engine.endpoint('/api/chat'), throwsFormatException);
+        final client = OllamaClient(
+          dir,
+          () => {'ollamaUrl': 'https://example.com'},
+        );
+        expect(() => client.endpoint('/api/chat'), throwsFormatException);
       } finally {
         await dir.delete(recursive: true);
       }
