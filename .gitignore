@@ -46,3 +46,12 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Memora: local models, recordings, archives and distribution files.
+/.runtime/
+/.local/
+/dist/
+
+# Local environment files.
+.env
+.env.*
