@@ -77,19 +77,23 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed: () => widget.onEditSpeaker(s),
-                                icon: const Icon(
-                                  Icons.person_outline,
-                                  size: 15,
-                                ),
-                                label: Text(
-                                  s.speaker.isEmpty
-                                      ? 'Attribuer un nom'
-                                      : s.speaker,
-                                  style: const TextStyle(
-                                    color: muted,
-                                    fontSize: 12,
+                              Flexible(
+                                child: TextButton.icon(
+                                  onPressed: () => widget.onEditSpeaker(s),
+                                  icon: const Icon(
+                                    Icons.person_outline,
+                                    size: 15,
+                                  ),
+                                  label: Text(
+                                    s.speaker.isEmpty
+                                        ? 'Attribuer un nom'
+                                        : s.speaker,
+                                    maxLines: 1,
+                                    overflow: .ellipsis,
+                                    style: const TextStyle(
+                                      color: muted,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                               ),

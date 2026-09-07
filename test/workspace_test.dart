@@ -22,7 +22,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();
-      expect(find.text("Vos conversations,\nl'esprit libre."), findsOneWidget);
+      expect(find.byKey(const ValueKey('library-title')), findsOneWidget);
       await tester.runAsync(() async {
         await tester.tap(find.byKey(const ValueKey('prepare-home')));
         await Future<void>.delayed(const Duration(milliseconds: 200));

@@ -20,7 +20,7 @@ class NavigationItem extends StatelessWidget {
   final String? subtitle;
   @override
   Widget build(BuildContext context) => Material(
-    color: active ? const Color(0xff26262b) : Colors.transparent,
+    color: active ? selectedSurface : Colors.transparent,
     borderRadius: BorderRadius.circular(8),
     child: InkWell(
       onTap: action,

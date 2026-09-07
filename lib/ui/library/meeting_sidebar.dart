@@ -10,8 +10,6 @@ class MeetingSidebar extends StatelessWidget {
     required this.compact,
     required this.meetings,
     required this.selected,
-    required this.search,
-    required this.onSearch,
     required this.onSelect,
     required this.onCreate,
     required this.onSettings,
@@ -20,18 +18,16 @@ class MeetingSidebar extends StatelessWidget {
   final bool compact;
   final List<Meeting> meetings;
   final Meeting? selected;
-  final String search;
-  final ValueChanged<String> onSearch;
   final ValueChanged<Meeting?> onSelect;
   final VoidCallback onCreate;
   final VoidCallback onSettings;
   final VoidCallback onGuide;
   @override
   Widget build(BuildContext context) => Container(
-    width: compact ? 76 : 244,
-    padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 18, vertical: 20),
+    width: compact ? 64 : 216,
+    padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 12, vertical: 20),
     decoration: const BoxDecoration(
-      color: Color(0xff101012),
+      color: sidebar,
       border: Border(right: BorderSide(color: line)),
     ),
     child: Column(
@@ -44,7 +40,7 @@ class MeetingSidebar extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xff27272b),
+                color: selectedSurface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.graphic_eq_rounded, color: ink),
@@ -54,7 +50,7 @@ class MeetingSidebar extends StatelessWidget {
               const Text(
                 'memora',
                 style: TextStyle(
-                  fontSize: 21,
+                  fontSize: 19,
                   fontWeight: .w700,
                   letterSpacing: -1,
                 ),
@@ -70,24 +66,13 @@ class MeetingSidebar extends StatelessWidget {
           action: () => onSelect(null),
           compact: compact,
         ),
-        const SizedBox(height: 12),
-        if (!compact)
-          TextField(
-            key: const ValueKey('meeting-search'),
-            onChanged: onSearch,
-            decoration: const InputDecoration(
-              hintText: 'Rechercher un meeting',
-              prefixIcon: Icon(Icons.search, size: 18),
-              isDense: true,
-            ),
-          ),
         const SizedBox(height: 26),
         Row(
           mainAxisAlignment: .spaceBetween,
           children: [
             if (!compact)
               const Text(
-                'MEETINGS',
+                'RÉCENTS',
                 style: TextStyle(
                   fontSize: 10,
                   letterSpacing: 1.8,
@@ -106,9 +91,7 @@ class MeetingSidebar extends StatelessWidget {
         Expanded(
           child: ListView(
             children: [
-              for (final m in meetings.where(
-                (m) => m.title.toLowerCase().contains(search.toLowerCase()),
-              ))
+              for (final m in meetings.take(12))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 7),
                   child: NavigationItem(
@@ -145,7 +128,7 @@ class MeetingSidebar extends StatelessWidget {
         Row(
           mainAxisAlignment: .center,
           children: [
-            const Icon(Icons.lock_outline, color: Color(0xff83c8a7), size: 14),
+            const Icon(Icons.lock_outline, color: muted, size: 14),
             if (!compact) ...[
               const SizedBox(width: 8),
               const Flexible(

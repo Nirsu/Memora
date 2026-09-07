@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/meeting.dart';
 import '../../utils/timestamps.dart';
 import '../core/app_theme.dart';
+import 'captures_pane.dart';
 
 class SummaryPane extends StatefulWidget {
   const SummaryPane({
@@ -137,11 +136,15 @@ class _SummaryPaneState extends State<SummaryPane> {
                               fontSize: 14,
                             ),
                             h2: const TextStyle(
-                              fontSize: 21,
+                              fontSize: 20,
                               fontWeight: .w600,
                               height: 2,
                             ),
-                            a: const TextStyle(color: accent),
+                            a: const TextStyle(
+                              color: accent,
+                              fontSize: 12,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                           imageBuilder: (_, _, _) => const SizedBox.shrink(),
                           onTapLink: (_, href, _) {
@@ -162,58 +165,13 @@ class _SummaryPaneState extends State<SummaryPane> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        for (final c in meeting.captures)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: Column(
-                              crossAxisAlignment: .start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: InkWell(
-                                    onTap: () => widget.onSeek(c.time),
-                                    child: Image.file(
-                                      File('${widget.folder}/${c.file}'),
-                                      fit: .fitWidth,
-                                      errorBuilder: (_, _, _) =>
-                                          const Text('Image introuvable'),
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: () => widget.onSeek(c.time),
-                                      child: Text(timeLabel(c.time)),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        c.caption,
-                                        maxLines: 2,
-                                        style: const TextStyle(
-                                          color: muted,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Modifier la légende',
-                                      onPressed: () => widget.onEditCaption(c),
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 16,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Retirer du résumé',
-                                      onPressed: () =>
-                                          widget.onRemoveCapture(c),
-                                      icon: const Icon(Icons.close, size: 16),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                        for (final capture in meeting.captures)
+                          CaptureCard(
+                            capture: capture,
+                            folder: widget.folder,
+                            onSeek: widget.onSeek,
+                            onEditCaption: widget.onEditCaption,
+                            onRemove: widget.onRemoveCapture,
                           ),
                       ],
                     ),

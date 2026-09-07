@@ -1,24 +1,33 @@
 import 'package:flutter/material.dart';
 
-const ink = Color(0xffededee);
-const muted = Color(0xff96969f);
-const accent = Color(0xffc4b5fd);
-const panel = Color(0xff19191c);
-const line = Color(0xff2b2b30);
+const ink = Color(0xffededeb);
+const muted = Color(0xffadadaa);
+const accent = Color(0xffe0e0dc);
+const canvas = Color(0xff171717);
+const sidebar = Color(0xff111111);
+const panel = Color(0xff202020);
+const selectedSurface = Color(0xff2a2a29);
+const line = Color(0xff343434);
 
 final ThemeData appTheme = ThemeData(
   brightness: .dark,
   useMaterial3: true,
   fontFamily: 'Segoe UI',
-  scaffoldBackgroundColor: const Color(0xff141416),
+  scaffoldBackgroundColor: canvas,
   splashFactory: NoSplash.splashFactory,
-  colorScheme: ColorScheme.fromSeed(seedColor: accent, brightness: .dark)
-      .copyWith(
+  colorScheme:
+      ColorScheme.fromSeed(
+        seedColor: accent,
+        brightness: .dark,
+        dynamicSchemeVariant: .monochrome,
+      ).copyWith(
         primary: accent,
-        onPrimary: const Color(0xff18181b),
+        onPrimary: sidebar,
         surface: panel,
         onSurface: ink,
         outline: line,
+        surfaceTint: Colors.transparent,
+        onSurfaceVariant: muted,
       ),
   dividerColor: line,
   textButtonTheme: TextButtonThemeData(
@@ -53,7 +62,7 @@ final ThemeData appTheme = ThemeData(
   ),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
-    fillColor: const Color(0xff141416),
+    fillColor: canvas,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
@@ -68,7 +77,7 @@ final ThemeData appTheme = ThemeData(
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
       backgroundColor: ink,
-      foregroundColor: const Color(0xff18181b),
+      foregroundColor: sidebar,
       textStyle: const TextStyle(
         fontFamily: 'Segoe UI',
         fontSize: 13,

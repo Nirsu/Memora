@@ -3,14 +3,31 @@ import 'package:flutter/material.dart';
 import '../../models/meeting.dart';
 import '../../utils/timestamps.dart';
 import '../core/app_theme.dart';
-import '../core/surfaces.dart';
 import '../core/delete_meeting_button.dart';
+import '../core/surfaces.dart';
 
-class LibraryView extends StatelessWidget {
+enum LibraryFilter {
+  all('Tous'),
+  notes('Notes seules'),
+  recordings('Enregistrements'),
+  summaries('Avec résumé');
+
+  const LibraryFilter(this.label);
+  final String label;
+  bool includes(Meeting meeting) => switch (this) {
+    .all => true,
+    .notes => meeting.media.isEmpty,
+    .recordings => meeting.media.isNotEmpty,
+    .summaries => meeting.summary.trim().isNotEmpty,
+  };
+}
+
+class LibraryView extends StatefulWidget {
   const LibraryView({
     super.key,
     required this.meetings,
     required this.search,
+    required this.onSearch,
     required this.busy,
     required this.onCreate,
     required this.onImport,
@@ -20,214 +37,209 @@ class LibraryView extends StatelessWidget {
   });
   final List<Meeting> meetings;
   final String search;
+  final ValueChanged<String> onSearch;
   final bool busy;
-  final VoidCallback onCreate;
-  final VoidCallback onImport;
-  final VoidCallback onGuide;
-  final ValueChanged<Meeting> onSelect;
-  final ValueChanged<Meeting> onDelete;
+  final VoidCallback onCreate, onImport, onGuide;
+  final ValueChanged<Meeting> onSelect, onDelete;
+  @override
+  State<LibraryView> createState() => _LibraryViewState();
+}
+
+class _LibraryViewState extends State<LibraryView> {
+  LibraryFilter filter = .all;
   @override
   Widget build(BuildContext context) {
-    final visible = meetings
-        .where((m) => m.title.toLowerCase().contains(search.toLowerCase()))
-        .toList();
+    final visible =
+        widget.meetings
+            .where(
+              (meeting) =>
+                  filter.includes(meeting) &&
+                  meeting.title.toLowerCase().contains(
+                    widget.search.trim().toLowerCase(),
+                  ),
+            )
+            .toList()
+          ..sort((a, b) => b.created.compareTo(a.created));
     return ListView(
       children: [
-        Row(
-          children: [
-            const Icon(Icons.folder_open_outlined, size: 17, color: muted),
-            const SizedBox(width: 10),
-            const Text(
-              'Espace personnel',
-              style: TextStyle(color: muted, fontSize: 12),
-            ),
-            const Spacer(),
-            Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
-                color: Color(0xff86b99a),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 7),
-            const Text(
-              'Sur cet ordinateur',
-              style: TextStyle(color: muted, fontSize: 11),
-            ),
-          ],
-        ),
-        const SizedBox(height: 44),
         const Text(
-          "Vos conversations,\nl'esprit libre.",
-          style: TextStyle(
-            fontSize: 38,
-            height: 1.15,
-            fontWeight: .w600,
-            letterSpacing: -1.4,
-          ),
+          'ESPACE PERSONNEL',
+          style: TextStyle(color: muted, fontSize: 10, letterSpacing: 1.5),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         const Text(
-          "Un endroit pour vos notes, vos enregistrements et ce qu'il faut retenir.",
-          style: TextStyle(color: muted, fontSize: 14, height: 1.6),
+          'Bibliothèque',
+          key: ValueKey('library-title'),
+          style: TextStyle(fontSize: 30, fontWeight: .w600, letterSpacing: -.8),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 8),
+        const Text(
+          'Vos notes, vos conversations, ce qui compte.',
+          style: TextStyle(color: muted, fontSize: 13),
+        ),
+        const SizedBox(height: 22),
         Wrap(
           spacing: 10,
-          runSpacing: 10,
+          runSpacing: 8,
           children: [
             FilledButton.icon(
               key: const ValueKey('prepare-home'),
-              onPressed: onCreate,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Préparer mon meeting'),
+              onPressed: widget.onCreate,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Nouveau meeting'),
             ),
             OutlinedButton.icon(
               key: const ValueKey('import-home'),
-              onPressed: !busy ? onImport : null,
+              onPressed: widget.busy ? null : widget.onImport,
               icon: const Icon(Icons.file_upload_outlined, size: 18),
               label: const Text('Importer un enregistrement'),
             ),
           ],
         ),
-        const SizedBox(height: 38),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: panel,
-            border: Border.all(color: line),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.videocam_outlined, size: 19, color: muted),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Enregistrez avec OBS, puis retrouvez le résumé et les moments clés ici.',
-                  style: TextStyle(color: muted, fontSize: 12, height: 1.5),
-                ),
-              ),
-              TextButton(
-                onPressed: onGuide,
-                child: const Text('Guide OBS', style: TextStyle(fontSize: 12)),
-              ),
-            ],
+        const SizedBox(height: 28),
+        TextFormField(
+          key: const ValueKey('meeting-search'),
+          initialValue: widget.search,
+          onChanged: widget.onSearch,
+          decoration: const InputDecoration(
+            hintText: 'Rechercher par titre…',
+            prefixIcon: Icon(Icons.search, size: 18),
+            isDense: true,
           ),
         ),
-        const SizedBox(height: 36),
-        Row(
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            const Text(
-              'Meetings',
-              style: TextStyle(fontSize: 16, fontWeight: .w600),
-            ),
-            const SizedBox(width: 10),
-            BadgeLabel('${visible.length}', color: muted),
-            const Spacer(),
-            const Text(
-              "Les plus récents d'abord",
-              style: TextStyle(color: muted, fontSize: 11),
-            ),
+            for (final value in LibraryFilter.values)
+              ChoiceChip(
+                label: Text(value.label, style: const TextStyle(fontSize: 12)),
+                selected: filter == value,
+                showCheckmark: false,
+                selectedColor: selectedSurface,
+                onSelected: (_) => setState(() => filter = value),
+              ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 26),
+        Text(
+          '${visible.length} meeting${visible.length == 1 ? '' : 's'} · Les plus récents d’abord',
+          style: const TextStyle(color: muted, fontSize: 11),
+        ),
+        const SizedBox(height: 12),
         if (visible.isEmpty)
           Panel(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 28),
+            child: Column(
+              children: [
+                const Icon(Icons.article_outlined, color: muted, size: 28),
+                const SizedBox(height: 14),
+                Text(
+                  widget.meetings.isEmpty
+                      ? 'Votre prochain meeting commence ici.'
+                      : 'Aucun meeting ne correspond à ces critères.',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Préparez vos notes ou importez un enregistrement OBS.',
+                  textAlign: .center,
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                TextButton(
+                  onPressed: widget.onGuide,
+                  child: const Text('Comment enregistrer avec OBS'),
+                ),
+              ],
+            ),
+          ),
+        for (var index = 0; index < visible.length; index++) ...[
+          if (index == 0 ||
+              DateUtils.dateOnly(visible[index - 1].created) !=
+                  DateUtils.dateOnly(visible[index].created))
+            Padding(
+              padding: const EdgeInsets.only(top: 20, bottom: 8),
+              child: Text(
+                '${visible[index].created.day}/${visible[index].created.month}/${visible[index].created.year}',
+                style: const TextStyle(color: muted, fontSize: 11),
+              ),
+            ),
+          _MeetingRow(
+            meeting: visible[index],
+            busy: widget.busy,
+            onSelect: widget.onSelect,
+            onDelete: widget.onDelete,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MeetingRow extends StatelessWidget {
+  const _MeetingRow({
+    required this.meeting,
+    required this.busy,
+    required this.onSelect,
+    required this.onDelete,
+  });
+  final Meeting meeting;
+  final bool busy;
+  final ValueChanged<Meeting> onSelect, onDelete;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: () => onSelect(meeting),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: line)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              meeting.media.isEmpty
+                  ? Icons.edit_note
+                  : Icons.play_circle_outline,
+              color: muted,
+              size: 22,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
+                crossAxisAlignment: .start,
                 children: [
-                  const Icon(Icons.article_outlined, color: muted, size: 30),
-                  const SizedBox(height: 14),
                   Text(
-                    search.isEmpty
-                        ? 'Votre prochain meeting commence ici.'
-                        : 'Aucun résultat pour cette recherche.',
-                    style: const TextStyle(fontWeight: .w500),
+                    meeting.title,
+                    maxLines: 1,
+                    overflow: .ellipsis,
+                    style: const TextStyle(fontSize: 13, fontWeight: .w600),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Préparez vos notes ou importez un enregistrement.',
-                    style: TextStyle(color: muted, fontSize: 12),
+                  const SizedBox(height: 5),
+                  Text(
+                    meeting.media.isEmpty
+                        ? 'Notes personnelles'
+                        : '${timeLabel(meeting.duration)} · ${meeting.hasVideo ? 'Vidéo' : 'Audio'}',
+                    style: const TextStyle(color: muted, fontSize: 11),
                   ),
                 ],
               ),
             ),
-          ),
-        for (final m in visible)
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => onSelect(m),
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 15,
-                ),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: line)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: panel,
-                        border: Border.all(color: line),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        m.media.isEmpty
-                            ? Icons.article_outlined
-                            : Icons.play_circle_outline,
-                        color: muted,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: .start,
-                        children: [
-                          Text(
-                            m.title,
-                            maxLines: 1,
-                            overflow: .ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: .w600,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            '${m.created.day}/${m.created.month}/${m.created.year}  ·  ${m.duration == 0 ? 'Notes préparatoires' : timeLabel(m.duration)}',
-                            style: const TextStyle(color: muted, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    BadgeLabel(
-                      m.status.label,
-                      color: m.status == .ready
-                          ? const Color(0xff9bc5ac)
-                          : muted,
-                    ),
-                    const SizedBox(width: 16),
-                    DeleteMeetingButton(
-                      meeting: m,
-                      onDelete: busy ? null : () => onDelete(m),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.chevron_right, size: 18, color: muted),
-                  ],
-                ),
-              ),
+            BadgeLabel(
+              meeting.status == .ready
+                  ? 'Résumé disponible'
+                  : meeting.status.label,
+              color: muted,
             ),
-          ),
-      ],
-    );
-  }
+            const SizedBox(width: 8),
+            DeleteMeetingButton(
+              meeting: meeting,
+              onDelete: busy ? null : () => onDelete(meeting),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

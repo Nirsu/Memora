@@ -253,7 +253,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       listenable: model,
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 900;
+          final compact = constraints.maxWidth < 1100;
           final selected = model.selected;
           return Row(
             children: [
@@ -261,8 +261,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 compact: compact,
                 meetings: model.meetings,
                 selected: selected,
-                search: model.search,
-                onSearch: model.searchMeetings,
                 onSelect: (meeting) =>
                     model.safely(() => selectMeeting(meeting)),
                 onCreate: () => model.safely(createMeeting),
@@ -271,13 +269,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.all(compact ? 18 : 32),
+                  padding: EdgeInsets.all(compact ? 18 : 24),
                   child: model.loading
                       ? const Center(child: CircularProgressIndicator())
                       : selected == null
                       ? LibraryView(
                           meetings: model.meetings,
                           search: model.search,
+                          onSearch: model.searchMeetings,
                           busy: model.busy,
                           onCreate: () => model.safely(createMeeting),
                           onImport: () => model.safely(importRecording),
@@ -291,7 +290,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           key: ValueKey(selected.id),
                           meeting: selected,
                           model: model,
-                          wide: constraints.maxWidth > 1250,
+                          wide: constraints.maxWidth >= 1100,
                           player: player,
                           video: video,
                           onBack: () => model.safely(() => selectMeeting(null)),

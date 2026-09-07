@@ -51,7 +51,7 @@ class MeetingHeader extends StatelessWidget {
           const Icon(Icons.lock_outline, color: muted, size: 14),
         ],
       ),
-      const SizedBox(height: 18),
+      const SizedBox(height: 8),
       Row(
         children: [
           Expanded(
@@ -60,7 +60,7 @@ class MeetingHeader extends StatelessWidget {
               maxLines: 2,
               overflow: .ellipsis,
               style: const TextStyle(
-                fontSize: 25,
+                fontSize: 24,
                 fontWeight: .w600,
                 letterSpacing: -.7,
               ),
@@ -82,7 +82,7 @@ class MeetingHeader extends StatelessWidget {
         "${meeting.created.day}/${meeting.created.month}/${meeting.created.year}  ·  ${meeting.duration == 0 ? 'Prêt à prendre des notes' : timeLabel(meeting.duration)}  ·  $saveState",
         style: const TextStyle(color: muted, fontSize: 12),
       ),
-      const SizedBox(height: 20),
+      const SizedBox(height: 14),
       Wrap(
         spacing: 10,
         runSpacing: 8,
@@ -93,7 +93,7 @@ class MeetingHeader extends StatelessWidget {
               icon: const Icon(Icons.attach_file, size: 18),
               label: const Text("Rattacher l'enregistrement OBS"),
             ),
-          if (meeting.media.isNotEmpty)
+          if (meeting.media.isNotEmpty && meeting.summary.isEmpty)
             FilledButton.icon(
               key: const ValueKey('analyze'),
               onPressed: !busy ? onAnalyze : null,
@@ -104,11 +104,25 @@ class MeetingHeader extends StatelessWidget {
                     : 'Générer un nouveau résumé',
               ),
             ),
-          OutlinedButton.icon(
-            onPressed: !busy ? onExport : null,
-            icon: const Icon(Icons.ios_share, size: 17),
-            label: const Text('Exporter'),
-          ),
+          if (meeting.summary.isNotEmpty)
+            FilledButton.icon(
+              onPressed: !busy ? onExport : null,
+              icon: const Icon(Icons.ios_share, size: 17),
+              label: const Text('Exporter le compte rendu'),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: !busy ? onExport : null,
+              icon: const Icon(Icons.ios_share, size: 17),
+              label: const Text('Exporter'),
+            ),
+          if (meeting.media.isNotEmpty && meeting.summary.isNotEmpty)
+            TextButton.icon(
+              key: const ValueKey('analyze'),
+              onPressed: !busy ? onAnalyze : null,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Régénérer le résumé'),
+            ),
           if (processing)
             TextButton.icon(
               onPressed: onCancel,
