@@ -30,9 +30,9 @@ class EngineSettingsDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              "Transcription : Whisper large-v3-turbo\nRésumé : Qwen3 8B · Ollama local\nCalcul après l'appel · aucun compte requis",
-              style: TextStyle(color: muted, height: 1.8),
+            Text(
+              "Transcription : Whisper large-v3-turbo\nRésumé : Qwen3 8B · Ollama local\nIntervenants : ${model.engine.hasDiarization ? 'détection locale installée' : 'installation facultative : scripts/setup-diarization.ps1'}\nCalcul après l'appel · aucun compte requis",
+              style: const TextStyle(color: muted, height: 1.8),
             ),
             const SizedBox(height: 16),
             SelectableText(

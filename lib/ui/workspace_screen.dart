@@ -12,6 +12,7 @@ import '../services/local_engine.dart';
 import '../services/local_files.dart';
 import 'dialogs/engine_settings_dialog.dart';
 import 'dialogs/meeting_dialogs.dart';
+import 'dialogs/speaker_dialog.dart';
 import 'dialogs/obs_guide_dialog.dart';
 import 'library/library_view.dart';
 import 'library/meeting_sidebar.dart';
@@ -80,6 +81,23 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Future<void> createMeeting() async =>
       selectMeeting(await model.createMeeting());
+
+  Future<void> editSpeaker(Meeting meeting, Segment segment) async {
+    if (model.busy) return;
+    final assignment = await showDialog<SpeakerAssignment>(
+      context: context,
+      builder: (_) => SpeakerDialog(meeting: meeting, segment: segment),
+    );
+    if (assignment == null || !mounted || model.busy) return;
+    await model.safely(
+      () => model.updateSpeaker(
+        meeting,
+        segment,
+        assignment.name,
+        speakerId: assignment.speakerId,
+      ),
+    );
+  }
 
   Future<void> seek(int position) async {
     await player?.seek(Duration(milliseconds: position));
@@ -313,11 +331,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                               model.safely(() => adoptSummary(selected)),
                           onSeek: (position) =>
                               model.safely(() => seek(position)),
-                          onEditSpeaker: (segment) => editText(
-                            'Intervenant de ce passage',
-                            segment.speaker,
-                            (value) =>
-                                model.updateSpeaker(selected, segment, value),
+                          onEditSpeaker: (segment) =>
+                              editSpeaker(selected, segment),
+                          onRenameSpeaker: (id) => editText(
+                            'Nommer cette voix · tous ses passages',
+                            selected.speakerNames[id] ?? '',
+                            (value) => model.renameSpeaker(selected, id, value),
                           ),
                           onEditText: (segment) => editText(
                             'Corriger la transcription',

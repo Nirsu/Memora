@@ -7,10 +7,50 @@ import 'package:memora/models/meeting.dart';
 import 'package:memora/services/local_engine.dart';
 import 'package:memora/ui/core/app_theme.dart';
 import 'package:memora/ui/meeting/meeting_view.dart';
+import 'package:memora/ui/meeting/meeting_header.dart';
 import 'package:memora/ui/meeting/replay_pane.dart';
 import 'package:memora/ui/workspace_view_model.dart';
 
 void main() {
+  testWidgets(
+    'Interrupted meeting offers resume and keeps saved results visible',
+    (tester) async {
+      final meeting = Meeting('resume', 'Test interrompu', DateTime(2026))
+        ..media = 'recording.mp4'
+        ..status = .interrupted
+        ..summary = 'Résumé sauvegardé'
+        ..segments = [Segment(0, 0, 1000, 'Source')]
+        ..error = 'Arrêt demandé';
+      var resumed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: Scaffold(
+            body: MeetingHeader(
+              meeting: meeting,
+              busy: false,
+              processing: false,
+              detail: '',
+              saveState: 'Enregistré',
+              onBack: () {},
+              onRename: () {},
+              onDelete: () {},
+              onImport: () {},
+              onAnalyze: () => resumed = true,
+              onExport: () {},
+              onCancel: () {},
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Reprendre le traitement'), findsOneWidget);
+      expect(find.textContaining('Transcription sauvegardée'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('analyze')));
+      expect(resumed, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Document tab and editor survive reader toggles and resizing', (
     tester,
   ) async {

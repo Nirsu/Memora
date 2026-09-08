@@ -11,7 +11,7 @@ Future<void> main(List<String> args) async {
     throw ArgumentError('Pass a local test recording.');
   }
   final root = Directory.current;
-  // Keep synthetic checks out of the user's meeting library.
+  // Keep technical checks out of the user's meeting library.
   final library = MeetingRepository(
     Directory('${root.path}/.local/smoke/meetings'),
   );
@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
       ? (await library.load()).firstWhere((m) => m.id == args[1])
       : Meeting(
           '${DateTime.now().microsecondsSinceEpoch}',
-          'Essai technique · réunion simulée',
+          'Essai technique · ${File(args.first).uri.pathSegments.last}',
           DateTime.now(),
         );
   engine.onUpdate = () =>
@@ -39,10 +39,24 @@ Future<void> main(List<String> args) async {
         m.summary != previousSummary) {
       throw StateError('Regeneration overwrote the editable summary');
     }
-    if (m.segments.isEmpty ||
-        m.summary.isEmpty ||
-        (m.hasVideo && m.captures.isEmpty)) {
+    if (m.segments.isEmpty || m.summary.isEmpty) {
       throw StateError('Incomplete pipeline output');
+    }
+    final restored = (await MeetingRepository(
+      library.root,
+    ).load()).firstWhere((item) => item.id == m.id);
+    if (restored.summary != m.summary ||
+        restored.segments.length != m.segments.length ||
+        restored.captures.length != m.captures.length ||
+        restored.status != m.status) {
+      throw StateError('Results did not survive reopening the repository');
+    }
+    for (final link in RegExp(r'memora://seek/(\d+)').allMatches(
+      await File('${library.folder(m)}/summary.generated.md').readAsString(),
+    )) {
+      if (!m.segments.any((s) => s.start == int.parse(link[1]!))) {
+        throw StateError('Replay link without a transcript source');
+      }
     }
     final exported = await engine.export(
       m,

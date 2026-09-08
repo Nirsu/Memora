@@ -228,9 +228,9 @@ class _ReplayPaneState extends State<ReplayPane> {
                     crossAxisAlignment: .start,
                     children: [
                       Text(
-                        source == null || source.speaker.isEmpty
+                        source == null || meeting.speakerLabel(source).isEmpty
                             ? 'PASSAGE EN COURS'
-                            : source.speaker,
+                            : meeting.speakerLabel(source),
                         style: const TextStyle(
                           fontSize: 10,
                           color: muted,

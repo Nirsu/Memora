@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/meeting.dart';
 import '../../utils/timestamps.dart';
 import '../core/app_theme.dart';
+import 'speakers_panel.dart';
 
 class TranscriptPane extends StatefulWidget {
   const TranscriptPane({
@@ -11,11 +12,17 @@ class TranscriptPane extends StatefulWidget {
     required this.onSeek,
     required this.onEditSpeaker,
     required this.onEditText,
+    this.busy = false,
+    this.onDetectSpeakers,
+    this.onRenameSpeaker,
   });
   final Meeting meeting;
   final ValueChanged<int> onSeek;
   final ValueChanged<Segment> onEditSpeaker;
   final ValueChanged<Segment> onEditText;
+  final bool busy;
+  final ValueChanged<int>? onDetectSpeakers;
+  final ValueChanged<String>? onRenameSpeaker;
   @override
   State<TranscriptPane> createState() => _TranscriptPaneState();
 }
@@ -23,32 +30,54 @@ class TranscriptPane extends StatefulWidget {
 class _TranscriptPaneState extends State<TranscriptPane> {
   Meeting get meeting => widget.meeting;
   String transcriptSearch = '';
+  bool uncertainOnly = false;
   @override
   Widget build(BuildContext context) {
     final visible = meeting.segments
         .where(
-          (s) => '${s.speaker} ${s.text}'.toLowerCase().contains(
-            transcriptSearch.toLowerCase(),
-          ),
+          (s) =>
+              (!uncertainOnly || s.speakerUncertain) &&
+              '${meeting.speakerLabel(s)} ${s.text}'.toLowerCase().contains(
+                transcriptSearch.toLowerCase(),
+              ),
         )
         .toList();
     return Column(
       children: [
         const SizedBox(height: 14),
-        TextField(
-          key: const ValueKey('transcript-search'),
-          onChanged: (s) => setState(() => transcriptSearch = s),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search, size: 18),
-            hintText: 'Rechercher dans la conversation',
-            isDense: true,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: const ValueKey('transcript-search'),
+                onChanged: (s) => setState(() => transcriptSearch = s),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search, size: 18),
+                  hintText: 'Rechercher dans la conversation',
+                  isDense: true,
+                ),
+              ),
+            ),
+            if (meeting.speakersDetected)
+              IconButton(
+                key: const ValueKey('uncertain-speakers'),
+                tooltip:
+                    '${meeting.segments.where((s) => s.speakerUncertain).length} passages : voix à vérifier',
+                isSelected: uncertainOnly,
+                onPressed: () => setState(() => uncertainOnly = !uncertainOnly),
+                icon: const Icon(Icons.filter_alt_outlined, size: 20),
+                selectedIcon: const Icon(Icons.filter_alt, size: 20),
+              ),
+          ],
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            'Les noms sont attribués manuellement dans cette version. Cliquez sur une étiquette pour identifier la voix.',
-            style: TextStyle(color: muted, fontSize: 11, height: 1.5),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: SpeakersPanel(
+            meeting: meeting,
+            busy: widget.busy,
+            onDetect: widget.onDetectSpeakers,
+            onRename: widget.onRenameSpeaker,
+            onSeek: widget.onSeek,
           ),
         ),
         Expanded(
@@ -79,15 +108,19 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                               ),
                               Flexible(
                                 child: TextButton.icon(
-                                  onPressed: () => widget.onEditSpeaker(s),
+                                  onPressed: widget.busy
+                                      ? null
+                                      : () => widget.onEditSpeaker(s),
                                   icon: const Icon(
                                     Icons.person_outline,
                                     size: 15,
                                   ),
                                   label: Text(
-                                    s.speaker.isEmpty
-                                        ? 'Attribuer un nom'
-                                        : s.speaker,
+                                    meeting.speakerLabel(s).isEmpty
+                                        ? (s.speakerUncertain
+                                              ? 'Voix à vérifier'
+                                              : 'Attribuer un nom')
+                                        : meeting.speakerLabel(s),
                                     maxLines: 1,
                                     overflow: .ellipsis,
                                     style: const TextStyle(
@@ -100,7 +133,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                               const Spacer(),
                               IconButton(
                                 tooltip: 'Corriger ce passage',
-                                onPressed: () => widget.onEditText(s),
+                                onPressed: widget.busy
+                                    ? null
+                                    : () => widget.onEditText(s),
                                 icon: const Icon(Icons.edit_outlined, size: 15),
                               ),
                             ],

@@ -61,13 +61,17 @@ List<SummaryItem> validatedItems(Object? data, Set<int> allowed) {
       );
     }
   }
-  if (items.isEmpty) {
+  if (items.isEmpty && (data['items'] as List).isNotEmpty) {
     throw const FormatException('Aucun passage source valide dans le résumé.');
   }
   return items;
 }
 
 String renderSummary(List<SummaryItem> items, List<Segment> segments) {
+  if (items.isEmpty) {
+    return 'Aucun élément suffisamment clair à synthétiser dans cette transcription. '
+        'La transcription et l’enregistrement restent disponibles pour relecture.\n';
+  }
   final byId = {for (final segment in segments) segment.id: segment};
   final out = StringBuffer();
   for (final kind in SummaryKind.values) {
@@ -75,11 +79,12 @@ String renderSummary(List<SummaryItem> items, List<Segment> segments) {
     if (group.isEmpty) continue;
     out.writeln('## ${kind.heading}\n');
     for (final item in group) {
-      final segment = byId[item.segmentIds.first]!;
+      final sources = item.segmentIds.map((id) => byId[id]!).toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
       final title = item.title.replaceAll('\n', ' ');
       out.writeln(
         '- ${title.isEmpty ? '' : '**$title** — '}${item.text} '
-        '[${timeLabel(segment.start)}](memora://seek/${segment.start})\n',
+        '${sources.map((s) => '[${timeLabel(s.start)}](memora://seek/${s.start})').join(' · ')}\n',
       );
     }
   }

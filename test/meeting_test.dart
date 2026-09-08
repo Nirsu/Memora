@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +13,65 @@ import 'package:memora/services/ollama_client.dart';
 import 'package:memora/services/local_files.dart';
 
 void main() {
+  test(
+    'Cancelling an Ollama startup probe stops startup immediately',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final received = Completer<void>();
+      final subscription = server.listen((request) async {
+        if (!received.isCompleted) {
+          // Leave the response pending to cancel a real in-flight request.
+          received.complete();
+          return;
+        }
+        request.response.write('{"models":[]}');
+        await request.response.close();
+      });
+      final client = OllamaClient(
+        Directory.systemTemp,
+        () => {'ollamaUrl': 'http://127.0.0.1:${server.port}'},
+      );
+      try {
+        final result = expectLater(client.startServer(), throwsStateError);
+        await received.future.timeout(const Duration(seconds: 5));
+        client.cancel();
+        await result;
+        // Cancellation must not prevent an explicit new startup attempt.
+        await client.startServer();
+      } finally {
+        client.dispose();
+        await subscription.cancel();
+        await server.close(force: true);
+      }
+    },
+  );
+
+  test('Mismatched metadata cannot overwrite another meeting', () async {
+    final dir = await Directory.systemTemp.createTemp('memora-identity-');
+    try {
+      final store = MeetingRepository(dir);
+      final alpha = Meeting('alpha', 'Alpha', DateTime(2026));
+      final beta = Meeting('beta', 'Beta', DateTime(2026))
+        ..notes = 'À conserver';
+      await store.save(alpha);
+      await store.save(alpha);
+      await store.save(beta);
+      await File('${store.folder(alpha)}/meeting.json')
+          .writeAsString(jsonEncode({...alpha.toJson(), 'id': 'beta'}));
+      final loaded = await store.load();
+      expect(loaded.map((m) => m.id), unorderedEquals(['alpha', 'beta']));
+      expect(store.warnings, hasLength(1));
+      final recovered = loaded.singleWhere((m) => m.id == 'alpha');
+      recovered.notes = 'Modification Alpha';
+      await store.save(recovered);
+      final reloaded = await store.load();
+      expect(reloaded.singleWhere((m) => m.id == 'beta').notes, 'À conserver');
+      expect(store.warnings, isEmpty);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('Cancelling an import leaves the original intact and removes its partial copy', () async {
     final dir = await Directory.systemTemp.createTemp('memora-import-test-');
     try {
@@ -87,8 +147,8 @@ void main() {
         2,
         3,
       ]);
-      await expectLater(
-        store.remove(Meeting('../escape', 'Invalide', DateTime(2026))),
+      expect(
+        () => Meeting('../escape', 'Invalide', DateTime(2026)),
         throwsFormatException,
       );
     } finally {
@@ -156,10 +216,7 @@ void main() {
     ]);
     expect(markdown, contains('memora://seek/12300'));
     expect(markdown, isNot(contains('999')));
-    expect(
-      () => validatedItems({'items': <Object?>[]}, {2}),
-      throwsFormatException,
-    );
+    expect(validatedItems({'items': <Object?>[]}, {2}), isEmpty);
     expect(replayTimestamp('memora://seek/12300'), 12300);
     for (final href in [
       null,

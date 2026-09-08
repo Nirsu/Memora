@@ -6,6 +6,7 @@ enum MeetingStatus {
   extracting('Extraction audio', isProcessing: true),
   transcribing('Transcription', isProcessing: true),
   transcribed('Transcrit'),
+  diarizing('Intervenants', isProcessing: true),
   summarizing('Résumé', isProcessing: true),
   capturing('Captures', isProcessing: true),
   ready('Prêt'),

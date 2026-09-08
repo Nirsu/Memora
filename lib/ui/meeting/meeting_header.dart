@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/meeting.dart';
+import '../../models/meeting_status.dart';
 import '../../utils/timestamps.dart';
 import '../core/app_theme.dart';
 import '../core/surfaces.dart';
@@ -99,7 +100,9 @@ class MeetingHeader extends StatelessWidget {
               onPressed: !busy ? onAnalyze : null,
               icon: const Icon(Icons.auto_awesome, size: 18),
               label: Text(
-                meeting.segments.isEmpty
+                meeting.canResume
+                    ? 'Reprendre le traitement'
+                    : meeting.segments.isEmpty
                     ? 'Transcrire et résumer'
                     : 'Générer un nouveau résumé',
               ),
@@ -121,7 +124,11 @@ class MeetingHeader extends StatelessWidget {
               key: const ValueKey('analyze'),
               onPressed: !busy ? onAnalyze : null,
               icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Régénérer le résumé'),
+              label: Text(
+                meeting.canResume
+                    ? 'Reprendre le traitement'
+                    : 'Régénérer le résumé',
+              ),
             ),
           if (processing)
             TextButton.icon(
@@ -139,11 +146,42 @@ class MeetingHeader extends StatelessWidget {
             children: [
               const LinearProgressIndicator(minHeight: 3),
               const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                children: [
+                  for (final step in [
+                    MeetingStatus.extracting,
+                    MeetingStatus.transcribing,
+                    MeetingStatus.diarizing,
+                    MeetingStatus.summarizing,
+                    MeetingStatus.capturing,
+                  ])
+                    if (step != .capturing || meeting.hasVideo)
+                      Text(
+                        step.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: meeting.status == step ? ink : muted,
+                          fontWeight: meeting.status == step ? .w700 : .normal,
+                        ),
+                      ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Text(
                 '${meeting.status.label} · $detail',
                 style: const TextStyle(color: accent, fontSize: 12),
               ),
             ],
+          ),
+        ),
+      if (meeting.canResume && meeting.segments.isNotEmpty)
+        const Padding(
+          padding: EdgeInsets.only(top: 10),
+          child: Text(
+            'Transcription sauvegardée. La reprise conserve les parties du résumé et les captures déjà terminées.',
+            style: TextStyle(color: muted, fontSize: 12),
           ),
         ),
       if (meeting.error.isNotEmpty)

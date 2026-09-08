@@ -170,7 +170,11 @@ class WorkspaceViewModel extends ChangeNotifier {
             'Le nouveau résumé sera enregistré séparément. Votre version modifiée reste intacte.',
           );
         }
-        await engine.process(meeting, summaryOnly: meeting.segments.isNotEmpty);
+        await engine.process(
+          meeting,
+          summaryOnly: meeting.segments.isNotEmpty,
+          regenerate: !meeting.canResume && meeting.summary.isNotEmpty,
+        );
       });
 
   void cancel() => engine.cancel();
@@ -208,11 +212,30 @@ class WorkspaceViewModel extends ChangeNotifier {
   Future<void> updateSpeaker(
     Meeting meeting,
     Segment segment,
-    String value,
-  ) async {
+    String value, {
+    String speakerId = '',
+  }) async {
+    if (speakerId.isNotEmpty && !meeting.speakerNames.containsKey(speakerId)) {
+      throw StateError('Cette voix n’existe plus.');
+    }
+    segment.speakerId = speakerId;
     segment.speaker = value.trim();
+    segment.speakerUncertain = false;
+    segment.speakerLocked = true;
     await save(meeting);
   }
+
+  Future<void> renameSpeaker(Meeting meeting, String id, String name) async {
+    if (!meeting.speakerNames.containsKey(id) || name.trim().isEmpty) return;
+    meeting.speakerNames[id] = name.trim();
+    await save(meeting);
+  }
+
+  Future<void> detectSpeakers(Meeting meeting, int count) => runJob(
+    meeting,
+    'Détection des intervenants',
+    () => engine.detectSpeakers(meeting, count: count),
+  );
 
   Future<void> updateTranscript(
     Meeting meeting,
@@ -268,7 +291,10 @@ class WorkspaceViewModel extends ChangeNotifier {
     _checking = true;
     _changed();
     try {
-      if (start) await engine.startServer();
+      if (start) {
+        engine.cancelled = false;
+        await engine.startServer();
+      }
       _engineIssues = await engine.check();
     } catch (error) {
       _engineIssues = [error.toString()];

@@ -7,8 +7,11 @@ import '../models/meeting.dart';
 import '../models/meeting_status.dart';
 import '../models/transcript.dart';
 import '../models/summary.dart';
+import '../models/speaker_turn.dart';
 import '../utils/timestamps.dart';
+import '../utils/frame_similarity.dart';
 import 'ollama_client.dart';
+import 'summary_checkpoint.dart';
 
 class LocalEngine {
   LocalEngine(this.root, this.library);
@@ -20,6 +23,11 @@ class LocalEngine {
   bool cancelled = false;
   String detail = '';
   void Function()? onUpdate;
+  bool get hasDiarization => [
+    'diarization',
+    'speakerSegmentation',
+    'speakerEmbedding',
+  ].every((key) => File(config[key] as String? ?? '').existsSync());
 
   Future<void> loadConfig() async {
     final file = File('${root.path}/.runtime/runtime.json');
@@ -60,6 +68,7 @@ class LocalEngine {
 
   Future<void> startServer() async {
     await loadConfig();
+    guard();
     await _ollama.startServer();
   }
 
@@ -184,35 +193,121 @@ class LocalEngine {
     await library.save(m);
   }
 
-  Future<void> process(Meeting m, {bool summaryOnly = false}) async {
+  Future<void> prepareAudio(Meeting m) async {
+    final dir = library.folder(m);
+    if (m.audioExtracted && await File('$dir/audio.wav').exists()) return;
+    await stage(m, .extracting, 'Préparation de la piste ${m.audioTrack + 1}');
+    await run(config['ffmpeg'] as String, [
+      '-y',
+      '-v',
+      'error',
+      '-i',
+      library.mediaPath(m),
+      '-map',
+      '0:a:${m.audioTrack}',
+      '-vn',
+      '-ar',
+      '16000',
+      '-ac',
+      '1',
+      '-c:a',
+      'pcm_s16le',
+      '-f',
+      'wav',
+      '$dir/audio.partial.wav',
+    ], logPath: '$dir/processing.log');
+    guard();
+    await File('$dir/audio.partial.wav').rename('$dir/audio.wav');
+    m.audioExtracted = true;
+    await library.save(m);
+  }
+
+  Future<void> _identifySpeakers(Meeting m, int count) async {
+    if (!hasDiarization) {
+      throw StateError(
+        'Installez les intervenants avec scripts/setup-diarization.ps1.',
+      );
+    }
+    if (count < 0 || count > 20) {
+      throw const FormatException('Nombre de voix invalide.');
+    }
+    await prepareAudio(m);
+    await stage(
+      m,
+      .diarizing,
+      'Séparation des voix sur cet ordinateur${count == 0 ? '' : ' · $count intervenants'}',
+    );
+    final dir = library.folder(m);
+    final output = await run(config['diarization'] as String, [
+      '--segmentation.pyannote-model=${config['speakerSegmentation']}',
+      '--embedding.model=${config['speakerEmbedding']}',
+      '--segmentation.num-threads=4',
+      '--embedding.num-threads=4',
+      if (count > 0)
+        '--clustering.num-clusters=$count'
+      else
+        '--clustering.cluster-threshold=0.5',
+      '$dir/audio.wav',
+    ], logPath: '$dir/diarization.log');
+    final turns = parseSpeakerTurns(output);
+    guard();
+    if (m.speakersDetected) {
+      await File('$dir/speakers.previous.json').writeAsString(
+        jsonEncode({
+          'speakerNames': m.speakerNames,
+          'segments': m.segments.map((s) => s.toJson()).toList(),
+        }),
+        flush: true,
+      );
+    }
+    await File('$dir/diarization.txt.tmp').writeAsString(output, flush: true);
+    await File('$dir/diarization.txt.tmp').rename('$dir/diarization.txt');
+    guard();
+    assignSpeakerTurns(m, turns);
+    m.expectedSpeakers = count;
+    m.speakerError = count > 0 && m.speakerNames.length != count
+        ? '${m.speakerNames.length} groupes obtenus pour $count intervenants attendus. Vérifiez les voix : le modèle peut avoir fusionné des personnes.'
+        : '';
+    await library.save(m);
+    onUpdate?.call();
+  }
+
+  Future<void> detectSpeakers(Meeting m, {int count = 0}) async {
+    cancelled = false;
+    final previousStatus = m.status;
+    try {
+      await loadConfig();
+      if (m.segments.isEmpty) {
+        throw StateError(
+          'Transcrivez le meeting avant de détecter les intervenants.',
+        );
+      }
+      await _identifySpeakers(m, count);
+      await stage(m, previousStatus, '${m.speakerNames.length} voix détectées');
+    } catch (e) {
+      m.speakerError = cancelled
+          ? 'Détection interrompue. Les attributions précédentes sont conservées.'
+          : e.toString();
+      m.status = previousStatus;
+      await library.save(m);
+      rethrow;
+    } finally {
+      onUpdate?.call();
+    }
+  }
+
+  Future<void> process(
+    Meeting m, {
+    bool summaryOnly = false,
+    bool regenerate = false,
+  }) async {
     cancelled = false;
     m.error = '';
-    await loadConfig();
     final dir = library.folder(m);
     try {
+      await loadConfig();
       if (!summaryOnly && m.segments.isEmpty) {
-        await stage(
-          m,
-          .extracting,
-          'Préparation de la piste ${m.audioTrack + 1}',
-        );
-        await run(config['ffmpeg'] as String, [
-          '-y',
-          '-v',
-          'error',
-          '-i',
-          library.mediaPath(m),
-          '-map',
-          '0:a:${m.audioTrack}',
-          '-vn',
-          '-ar',
-          '16000',
-          '-ac',
-          '1',
-          '-c:a',
-          'pcm_s16le',
-          '$dir/audio.wav',
-        ], logPath: '$dir/processing.log');
+        await prepareAudio(m);
         await stage(
           m,
           .transcribing,
@@ -281,65 +376,93 @@ class LocalEngine {
       if (m.segments.isEmpty) {
         throw Exception('Une transcription est nécessaire.');
       }
-      await startServer();
-      final chunks = transcriptChunks(m.segments);
-      final all = <SummaryItem>[];
-      for (var i = 0; i < chunks.length; i++) {
+      if (hasDiarization && !m.speakersDetected) {
+        try {
+          await _identifySpeakers(m, m.expectedSpeakers);
+        } catch (e) {
+          guard();
+          // Voice detection is optional: a model error must not lose the summary.
+          m.speakerError = e.toString();
+          await library.save(m);
+        }
+      }
+      // ponytail: character budget keeps ordinary French within the 16k context;
+      // token-aware splitting can follow if unusually dense sources exceed it.
+      final chunks = transcriptChunks(m.segments, maxChars: 18000);
+      final checkpoint = SummaryCheckpoint(
+        File('$dir/summary.checkpoint.json'),
+        jsonEncode({
+          'version': 6,
+          'model': config['summaryModel'],
+          'speakerNames': m.speakerNames,
+          'chunks': chunks
+              .map((c) => c.map((s) => s.toJson()).toList())
+              .toList(),
+        }),
+      );
+      if (!regenerate) {
+        await checkpoint.load(m.segments.map((s) => s.id).toSet());
+      }
+      // Persist a fresh generation before running inference, invalidating old work.
+      await checkpoint.save();
+      if (checkpoint.parts.length < chunks.length) {
         await stage(
           m,
           .summarizing,
-          'Analyse locale · partie ${i + 1}/${chunks.length}',
+          'Démarrage de l’IA locale · ${checkpoint.parts.length}/${chunks.length} parties sauvegardées',
+        );
+        await startServer();
+        guard();
+      }
+      for (var i = checkpoint.parts.length; i < chunks.length; i++) {
+        await stage(
+          m,
+          .summarizing,
+          'Rédaction depuis la transcription · partie ${i + 1}/${chunks.length}',
         );
         final text = chunks[i]
             .map(
               (s) =>
-                  '[${s.id}] ${s.speaker.isEmpty ? '' : '${s.speaker}: '}${s.text}',
+                  '[${s.id}] ${m.speakerLabel(s).isEmpty ? '' : '${m.speakerLabel(s)}: '}${s.text}',
             )
             .join('\n');
-        all.addAll(await summarize(text, chunks[i].map((s) => s.id).toSet()));
-      }
-      var items = all;
-      // ponytail: bounded reduction keeps long meetings within a local context window.
-      while (items.length > 18) {
-        await stage(
-          m,
-          .summarizing,
-          'Consolidation des sujets et suppression des doublons',
+        checkpoint.parts.add(
+          await summarize(text, chunks[i].map((s) => s.id).toSet()),
         );
-        final reduced = <SummaryItem>[];
-        for (var i = 0; i < items.length; i += 18) {
-          final batch = items.sublist(i, min(i + 18, items.length));
-          reduced.addAll(
-            await summarize(
-              jsonEncode({'items': batch}),
-              batch.expand((s) => s.segmentIds).toSet(),
-              consolidate: true,
-            ),
-          );
-        }
-        if (reduced.length >= items.length) {
-          items = reduced;
-          break;
-        }
-        items = reduced;
+        await checkpoint.save();
       }
+      // Every fact comes directly from source text; never summarize summaries.
+      final seen = <String>{};
+      final items = checkpoint.parts
+          .expand((part) => part)
+          .where(
+            (item) => seen.add(
+              '${item.kind.code}:${item.text.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim()}',
+            ),
+          )
+          .toList();
       final generated = renderSummary(items, m.segments);
-      await File('$dir/summary.generated.md')
+      await File('$dir/summary.generated.md.tmp')
           .writeAsString(generated, flush: true);
+      await File('$dir/summary.generated.md.tmp')
+          .rename('$dir/summary.generated.md');
       // Keep the editable version: regeneration never erases user corrections.
       if (m.summary.isEmpty) {
         m.summary = generated;
       }
       await library.save(m);
-      if (m.hasVideo && m.captures.isEmpty) {
+      if (m.hasVideo) {
         final byId = {for (final s in m.segments) s.id: s};
-        for (final item in items) {
+        for (var i = checkpoint.nextCapture; i < items.length; i++) {
           guard();
           if (m.captures.length >= 8) {
             break;
           }
+          final item = items[i];
           final s = byId[item.segmentIds.first]!;
           if (m.captures.any((c) => (c.time - s.start).abs() < 15000)) {
+            checkpoint.nextCapture = i + 1;
+            await checkpoint.save();
             continue;
           }
           await stage(
@@ -348,9 +471,11 @@ class LocalEngine {
             'Illustration ${m.captures.length + 1} · ${timeLabel(s.start)}',
           );
           await capture(m, s.start, item.title, skipIdentical: true);
+          checkpoint.nextCapture = i + 1;
+          await checkpoint.save();
         }
       }
-      await stage(m, .ready, 'Résumé et captures disponibles');
+      await stage(m, .ready, 'Compte rendu disponible');
     } catch (e) {
       m.status = cancelled ? .interrupted : .error;
       m.error = cancelled
@@ -363,17 +488,9 @@ class LocalEngine {
     }
   }
 
-  Future<List<SummaryItem>> summarize(
-    String text,
-    Set<int> allowed, {
-    bool consolidate = false,
-  }) async {
+  Future<List<SummaryItem>> summarize(String text, Set<int> allowed) async {
     guard();
-    final items = await _ollama.summarize(
-      text,
-      allowed,
-      consolidate: consolidate,
-    );
+    final items = await _ollama.summarize(text, allowed);
     guard();
     return items;
   }
@@ -409,13 +526,12 @@ class LocalEngine {
       throw Exception("Pas d'image à cet instant.");
     }
     if (skipIdentical) {
-      // ponytail: exact duplicates only; visual similarity can follow real meeting feedback.
       final candidate = File('${library.folder(m)}/$name');
-      final signature = base64Encode(await candidate.readAsBytes());
+      final signature = await frameSignature(candidate.path);
       for (final previous in m.captures) {
         final file = File('${library.folder(m)}/${previous.file}');
         if (await file.exists() &&
-            base64Encode(await file.readAsBytes()) == signature) {
+            similarFrames(await frameSignature(file.path), signature)) {
           await candidate.delete();
           return null;
         }
@@ -430,6 +546,29 @@ class LocalEngine {
     await library.save(m);
     onUpdate?.call();
     return shot;
+  }
+
+  Future<List<int>> frameSignature(String path) async {
+    final thumbnail = File('$path.gray');
+    try {
+      await run(config['ffmpeg'] as String, [
+        '-y',
+        '-v',
+        'error',
+        '-i',
+        path,
+        '-vf',
+        'scale=64:36:flags=area,format=gray',
+        '-frames:v',
+        '1',
+        '-f',
+        'rawvideo',
+        thumbnail.path,
+      ]);
+      return await thumbnail.readAsBytes();
+    } finally {
+      if (await thumbnail.exists()) await thumbnail.delete();
+    }
   }
 
   Future<String> export(Meeting m, String destination) async {
@@ -463,13 +602,17 @@ class LocalEngine {
       m.segments
           .map(
             (s) =>
-                '[${timeLabel(s.start)}] ${s.speaker.isEmpty ? '' : '${s.speaker} : '}${s.text}',
+                '[${timeLabel(s.start)}] ${m.speakerLabel(s).isEmpty ? '' : '${m.speakerLabel(s)} : '}${s.text}',
           )
           .join('\n\n'),
       flush: true,
     );
     await File('${dir.path}/transcription.json').writeAsString(
-      jsonEncode(m.segments.map((s) => s.toJson()).toList()),
+      jsonEncode(
+        m.segments
+            .map((s) => {...s.toJson(), 'speaker': m.speakerLabel(s)})
+            .toList(),
+      ),
       flush: true,
     );
     return dir.path;

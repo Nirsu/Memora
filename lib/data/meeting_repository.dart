@@ -47,9 +47,6 @@ class MeetingRepository {
 
   Future<void> _move(Meeting m, {required bool restore}) {
     final next = _writes.then((_) async {
-      if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(m.id)) {
-        throw const FormatException('Identifiant de meeting invalide.');
-      }
       final base = await root.resolveSymbolicLinks();
       final trash = Directory('$base/.trash');
       if (await FileSystemEntity.type(trash.path, followLinks: false) ==
@@ -80,6 +77,7 @@ class MeetingRepository {
   }
 
   Future<List<Meeting>> load() async {
+    warnings.clear();
     await root.create(recursive: true);
     final result = <Meeting>[];
     await for (final entry in root.list()) {
@@ -94,9 +92,14 @@ class MeetingRepository {
           if (!await file.exists()) {
             continue;
           }
-          meeting = Meeting.fromJson(
+          final candidate = Meeting.fromJson(
             jsonDecode(await file.readAsString()) as Map<String, dynamic>,
           );
+          if (candidate.id !=
+              entry.uri.pathSegments.where((s) => s.isNotEmpty).last) {
+            throw const FormatException('Identifiant du dossier incohérent.');
+          }
+          meeting = candidate;
           if (suffix.isNotEmpty) {
             warnings.add('Copie de secours restaurée : ${meeting.title}');
           }

@@ -2,7 +2,21 @@
 
 Application Flutter pour Windows : notes de réunion, import d'un enregistrement OBS, transcription et résumé locaux, captures et replay.
 
-**Démarrer :** double-cliquer sur `Lancer Memora.cmd`. Consulter le [guide utilisateur](docs/guide.md), la [review avec les vérifications](docs/review.md) et l'[architecture du code](docs/architecture.md).
+Consulter le [guide utilisateur](docs/guide.md), l'[architecture du code](docs/architecture.md) et le fonctionnement des [intervenants](docs/intervenants.md).
+
+## Installation depuis le dépôt
+
+Prérequis : Windows x64, Flutter avec Dart 3.13.1 ou plus récent, et Visual Studio avec la charge de travail **Développement Desktop en C++**. Vérifier l'environnement avec `flutter doctor -v` ; voir la [configuration Windows de Flutter](https://docs.flutter.dev/platform-integration/windows/setup).
+
+Depuis la racine du dépôt :
+
+```powershell
+flutter pub get
+powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+flutter build windows --release --no-tree-shake-icons
+```
+
+L'installation télécharge les moteurs et les modèles dans `.runtime/` et nécessite plusieurs Go libres. Double-cliquer ensuite sur `Lancer Memora.cmd`. Après une modification du code, reconstruire la version Release pour mettre à jour celle du lanceur.
 
 ## Développement
 
@@ -14,7 +28,7 @@ flutter run -d windows
 flutter build windows --release --no-tree-shake-icons
 ```
 
-Les moteurs s'installent avec `scripts/setup.ps1`. Le test complet `dart run scripts/smoke.dart <video>` utilise une bibliothèque isolée, sans ajouter de meeting à l'app.
+Le test complet `dart run scripts/smoke.dart <video>` utilise une bibliothèque isolée, sans ajouter de meeting à l'app. Il nécessite les moteurs installés. Les tests `flutter test` utilisent des données temporaires et ne nécessitent pas les modèles.
 
 ## Structure
 
@@ -23,7 +37,7 @@ Les moteurs s'installent avec `scripts/setup.ps1`. Le test complet `dart run scr
 - `lib/models/` : réunions, transcription, résumés et statuts typés.
 - `lib/data/` : stockage local, sauvegardes et corbeille.
 - `lib/services/` : traitement des médias, client Ollama et intégration fichiers Windows.
-- `lib/utils/` : formatage et validation des timestamps.
+- `lib/utils/` : timestamps et comparaison des captures.
 - `windows/` : intégration et compilation Windows.
 - `test/` : tests de stockage et de parcours utilisateur.
 - `scripts/` : installation des moteurs et vérification sur une vidéo d'essai.
@@ -33,4 +47,4 @@ Les moteurs s'installent avec `scripts/setup.ps1`. Le test complet `dart run scr
 
 ## Périmètre actuel
 
-OBS enregistre l'appel (MKV ou MP4 hybride). Memora traite ensuite le fichier sur cette machine, avec Whisper et Qwen3 via Ollama. Les noms des intervenants sont attribués manuellement. Les captures sont proposées autour des passages du résumé, sans analyse visuelle. Les notes personnelles sont sauvegardées et exportées ; elles ne sont pas utilisées comme source du résumé IA.
+OBS enregistre l'appel (MKV ou MP4 hybride). Memora traite ensuite le fichier sur cette machine, avec Whisper et Qwen3 via Ollama. Une détection expérimentale regroupe les voix localement : l'utilisateur nomme chaque groupe une fois et peut corriger un passage. Le moteur facultatif s'installe avec `scripts/setup-diarization.ps1` ; ses limites sont détaillées dans [Intervenants](docs/intervenants.md). Les captures sont proposées autour des passages du résumé, sans analyse visuelle. Les notes personnelles sont sauvegardées et exportées ; elles ne sont pas utilisées comme source du résumé IA.

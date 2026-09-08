@@ -32,7 +32,7 @@ $ffmpegExe = Get-ChildItem "$runtimeRoot/ffmpeg" -Filter ffmpeg.exe -Recurse | S
 $ffprobeExe = Get-ChildItem "$runtimeRoot/ffmpeg" -Filter ffprobe.exe -Recurse | Select-Object -First 1
 $whisperExe = Get-ChildItem "$runtimeRoot/whisper" -Filter whisper-cli.exe -Recurse | Select-Object -First 1
 if (-not $ffmpegExe -or -not $ffprobeExe -or -not $whisperExe) { throw 'Missing downloaded executable' }
-@{
+$runtimeConfig = @{
     ffmpeg = $ffmpegExe.FullName
     ffprobe = $ffprobeExe.FullName
     whisper = $whisperExe.FullName
@@ -42,7 +42,16 @@ if (-not $ffmpegExe -or -not $ffprobeExe -or -not $whisperExe) { throw 'Missing 
     ollamaUrl = 'http://127.0.0.1:11435'
     summaryModel = 'qwen3:8b'
     useGpu = $true
-} | ConvertTo-Json | Set-Content -LiteralPath "$runtimeRoot/runtime.json" -Encoding utf8
+}
+# Preserve the optional voice engine when reinstalling the base engines.
+if (Test-Path -LiteralPath "$runtimeRoot/runtime.json") {
+    $previousConfig = Get-Content -LiteralPath "$runtimeRoot/runtime.json" -Raw | ConvertFrom-Json
+    foreach ($key in @('diarization', 'speakerSegmentation', 'speakerEmbedding')) {
+        if ($previousConfig.$key) { $runtimeConfig[$key] = $previousConfig.$key }
+    }
+}
+$runtimeConfig | ConvertTo-Json | Set-Content -LiteralPath "$runtimeRoot/runtime.json.tmp" -Encoding utf8
+Move-Item -LiteralPath "$runtimeRoot/runtime.json.tmp" -Destination "$runtimeRoot/runtime.json" -Force
 
 $env:OLLAMA_HOST = '127.0.0.1:11435'
 $env:OLLAMA_MODELS = "$runtimeRoot/ollama-models"

@@ -4,6 +4,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../models/meeting.dart';
 import '../core/app_theme.dart';
+import '../dialogs/meeting_dialogs.dart';
 import 'captures_pane.dart';
 import '../workspace_view_model.dart';
 import 'meeting_header.dart';
@@ -34,6 +35,7 @@ class MeetingView extends StatefulWidget {
     required this.onEditSpeaker,
     required this.onEditText,
     required this.onEditCaption,
+    this.onRenameSpeaker,
   });
 
   final Meeting meeting;
@@ -52,6 +54,7 @@ class MeetingView extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final ValueChanged<Segment> onEditSpeaker, onEditText;
   final ValueChanged<Capture> onEditCaption;
+  final ValueChanged<String>? onRenameSpeaker;
 
   @override
   State<MeetingView> createState() => _MeetingViewState();
@@ -79,6 +82,22 @@ class _MeetingViewState extends State<MeetingView> {
   void seek(int time) {
     setState(() => readerVisible = true);
     widget.onSeek(time);
+  }
+
+  Future<void> detectSpeakers(int count) async {
+    if (model.busy) return;
+    if (meeting.speakersDetected) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => const ConfirmMeetingDialog(
+          title: 'Recalculer les voix ?',
+          message: 'Les groupes seront recalculés et devront être nommés à nouveau. Les corrections individuelles sont conservées et les anciennes attributions sont sauvegardées dans le dossier du meeting.',
+          acceptLabel: 'Recalculer',
+        ),
+      );
+      if (confirmed != true || !mounted || model.busy) return;
+    }
+    await model.detectSpeakers(meeting, count);
   }
 
   @override
@@ -138,6 +157,10 @@ class _MeetingViewState extends State<MeetingView> {
                 onSeek: seek,
                 onEditSpeaker: widget.onEditSpeaker,
                 onEditText: widget.onEditText,
+                busy: model.busy,
+                onDetectSpeakers: (count) =>
+                    model.safely(() => detectSpeakers(count)),
+                onRenameSpeaker: widget.onRenameSpeaker,
               ),
               NotesPane(
                 meeting: meeting,
